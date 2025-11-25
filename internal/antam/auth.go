@@ -17,6 +17,33 @@ func dumpHTML(filename string, body []byte) {
 	_ = ioutil.WriteFile(filename, body, 0644)
 }
 
+// CheckSessionAlive mengecek apakah cookie saat ini masih valid
+// Return true jika masih login, false jika sudah logout/expired
+func CheckSessionAlive(client *AntamClient) bool {
+	// Kita coba akses halaman profil user
+	resp, err := client.DoRequest("GET", "https://antrean.logammulia.com/users", nil, nil)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Jika redirect ke login (302) atau status bukan 200, berarti mati
+	if resp.StatusCode != 200 {
+		return false
+	}
+
+	// Double check body content
+	bodyBytes, _ := ioutil.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+	
+	// Indikator halaman profil user
+	if strings.Contains(bodyStr, "Profile") || strings.Contains(bodyStr, "Logout") || strings.Contains(bodyStr, "settings") {
+		return true
+	}
+
+	return false
+}
+
 func PerformLogin(client *AntamClient, username, password, captchaKey string) error {
 	loginURL := "https://antrean.logammulia.com/login"
 	homeURL := "https://antrean.logammulia.com/"
