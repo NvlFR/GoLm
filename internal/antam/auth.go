@@ -17,32 +17,6 @@ func dumpHTML(filename string, body []byte) {
 	_ = ioutil.WriteFile(filename, body, 0644)
 }
 
-// CheckSessionAlive mengecek apakah cookie saat ini masih valid
-// Return true jika masih login, false jika sudah logout/expired
-func CheckSessionAlive(client *AntamClient) bool {
-	// Kita coba akses halaman profil user
-	resp, err := client.DoRequest("GET", "https://antrean.logammulia.com/users", nil, nil)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-
-	// Jika redirect ke login (302) atau status bukan 200, berarti mati
-	if resp.StatusCode != 200 {
-		return false
-	}
-
-	// Double check body content
-	bodyBytes, _ := ioutil.ReadAll(resp.Body)
-	bodyStr := string(bodyBytes)
-	
-	// Indikator halaman profil user
-	if strings.Contains(bodyStr, "Profile") || strings.Contains(bodyStr, "Logout") || strings.Contains(bodyStr, "settings") {
-		return true
-	}
-
-	return false
-}
 
 func PerformLogin(client *AntamClient, username, password, captchaKey string) error {
 	loginURL := "https://antrean.logammulia.com/login"
@@ -138,4 +112,36 @@ func PerformLogin(client *AntamClient, username, password, captchaKey string) er
 
 	dumpHTML("debug_login_fail.html", bodyFail)
 	return fmt.Errorf("login gagal status %d", respLogin.StatusCode)
+}
+
+func CheckSessionAlive(client *AntamClient) bool {
+	// Kita cek ke halaman antrean, bukan users (lebih ringan)
+	// Dan pakai header lengkap agar tidak dikira bot
+	resp, err := client.DoRequest("GET", "https://antrean.logammulia.com/antrean", nil, nil)
+	if err != nil {
+		// Network error jangan dianggap sesi mati dulu (bisa jadi proxy timeout)
+		return false 
+	}
+	defer resp.Body.Close()
+
+	// Jika status 200 OK, kemungkinan besar masih hidup
+	if resp.StatusCode == 200 {
+		// Cek redirect URL (Kalau dilempar ke login, berarti mati)
+		finalURL := resp.Request.URL.String()
+		if strings.Contains(finalURL, "login") {
+			return false
+		}
+		return true
+	}
+
+	// Jika 302/303 redirect ke login -> Mati
+	if resp.StatusCode == 302 || resp.StatusCode == 303 {
+		loc, _ := resp.Header["Location"]
+		if len(loc) > 0 && strings.Contains(loc[0], "login") {
+			return false
+		}
+	}
+
+	// Default: Asumsikan hidup kalau responnya aneh-aneh (biar gak dikit-dikit login)
+	return true
 }

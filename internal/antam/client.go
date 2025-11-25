@@ -7,7 +7,7 @@ import (
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
-
+	
 	"github.com/username/golm/internal/repository"
 )
 
@@ -21,10 +21,9 @@ func NewAntamClient(proxyURL string) (*AntamClient, error) {
 
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
-		// FIX: Gunakan Chrome 117 (Support di tls-client v1.7.2)
-		tls_client.WithClientProfile(profiles.Chrome_117),
-		tls_client.WithRandomTLSExtensionOrder(),
-		tls_client.WithNotFollowRedirects(),
+		// UPGRADE: Sekarang kita bisa pakai Chrome 124!
+		tls_client.WithClientProfile(profiles.Chrome_124),
+		tls_client.WithNotFollowRedirects(),      // Tetap manual redirect
 		tls_client.WithCookieJar(jar),
 	}
 
@@ -39,8 +38,8 @@ func NewAntamClient(proxyURL string) (*AntamClient, error) {
 
 	return &AntamClient{
 		HttpClient: client,
-		// User Agent disesuaikan ke Chrome 117
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
+		// User Agent Chrome 124 Asli
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 	}, nil
 }
 
@@ -58,8 +57,8 @@ func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[str
 		return nil, err
 	}
 
-	// HEADER Chrome 117 yang valid
-	req.Header.Set("sec-ch-ua", `"Google Chrome";v="117", "Not;A=Brand";v="8", "Chromium";v="117"`)
+	// HEADER SET CHROME 124 (Sangat penting urutannya)
+	req.Header.Set("sec-ch-ua", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`)
 	req.Header.Set("sec-ch-ua-mobile", "?0")
 	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
 	req.Header.Set("upgrade-insecure-requests", "1")
@@ -85,16 +84,18 @@ func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[str
 	}
 
 	return c.HttpClient.Do(req)
-
-	
 }
 
+// LoadCookies yang diperbaiki (JURUS ANTI-LOGOUT)
 func (c *AntamClient) LoadCookies(cookies []repository.CookieEntry) {
-	u1, _ := url.Parse("https://antrean.logammulia.com")
-	u2, _ := url.Parse("https://logammulia.com")
+	// Kita pasang cookie di semua variasi domain agar pasti terbaca
+	urls := []string{
+		"https://antrean.logammulia.com",
+		"https://logammulia.com",
+		"https://www.logammulia.com",
+	}
 
-var jarCookies []*http.Cookie
-
+	var jarCookies []*http.Cookie
 	for _, cEntry := range cookies {
 		jarCookies = append(jarCookies, &http.Cookie{
 			Name:   cEntry.Name,
@@ -104,6 +105,9 @@ var jarCookies []*http.Cookie
 		})
 	}
 	
-	c.HttpClient.GetCookieJar().SetCookies(u1, jarCookies)
-	c.HttpClient.GetCookieJar().SetCookies(u2, jarCookies)
+	// Inject ke semua kemungkinan domain
+	for _, uStr := range urls {
+		u, _ := url.Parse(uStr)
+		c.HttpClient.GetCookieJar().SetCookies(u, jarCookies)
+	}
 }

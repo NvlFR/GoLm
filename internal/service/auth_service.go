@@ -73,6 +73,7 @@ func LoginSingleAccount() {
 
 		// Update struct akun
 		targetAcc.Cookies = savedCookies
+		targetAcc.LastProxy = proxyURL
 		
 		// Simpan ke JSON
 		err := repository.UpdateAccount(num-1, targetAcc)

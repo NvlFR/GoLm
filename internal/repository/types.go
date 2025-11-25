@@ -11,8 +11,8 @@ type CookieEntry struct {
 type Account struct {
 	Username string        `json:"username"`
 	Password string        `json:"password"`
-	// [BARU] Field ini wajib ada untuk menyimpan sesi login
 	Cookies  []CookieEntry `json:"cookies"` 
+	LastProxy string        `json:"last_proxy"`
 	Active   bool          `json:"active"`
 }
 

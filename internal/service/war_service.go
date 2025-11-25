@@ -71,10 +71,21 @@ func SingleWar() {
 	
 	targetTimeStr := promptInput("Masukkan Jam Perang (HH:MM:SS)", settings.WarTime)
 
-	// --- BAGIAN 3: INIT CLIENT ---
-	proxyURL := GetRandomProxy()
-	fmt.Printf("\n🔥 Menyiapkan Sniper untuk %s...\n", targetAcc.Username)
-	fmt.Printf("🌍 Proxy Awal: ...%s\n", proxyURL[len(proxyURL)-10:])
+// --- BAGIAN 3: INIT CLIENT (STRICT IP BINDING) ---
+	
+	var proxyURL string
+	
+	// Cek apakah akun punya riwayat proxy?
+	if targetAcc.LastProxy != "" {
+		proxyURL = targetAcc.LastProxy
+		fmt.Printf("\n🔥 Menyiapkan Sniper untuk %s...\n", targetAcc.Username)
+		fmt.Printf("🔗 Menggunakan Proxy Terikat (Sesi Lama): ...%s\n", proxyURL[len(proxyURL)-10:])
+	} else {
+		// Kalau belum pernah login/gak ada data, baru ambil random
+		proxyURL = GetRandomProxy()
+		fmt.Printf("\n🔥 Menyiapkan Sniper untuk %s...\n", targetAcc.Username)
+		fmt.Printf("🌍 Menggunakan Proxy Random: ...%s\n", proxyURL[len(proxyURL)-10:])
+	}
 	
 	client, err := antam.NewAntamClient(proxyURL)
 	if err != nil {
@@ -87,24 +98,23 @@ func SingleWar() {
 	// Helper Function untuk Re-Login Total dengan Proxy Baru
 	renewSession := func() error {
 		fmt.Println("🔄 ROTASI PROXY & RE-LOGIN...")
-		// 1. Ganti Proxy
+		
+		// 1. Ganti Proxy (Karena yang lama mungkin sudah diblokir)
 		newProxy := GetRandomProxy()
 		fmt.Printf("🌍 New Proxy: ...%s\n", newProxy[len(newProxy)-10:])
 		
-		// 2. Buat Client Baru (Reset Cookie Jar & IP)
+		// 2. Buat Client Baru
 		newClient, err := antam.NewAntamClient(newProxy)
-		if err != nil {
-			return err
-		}
-		*client = *newClient // Timpa client lama dengan yang baru
+		if err != nil { return err }
+		*client = *newClient 
 
 		// 3. Login Ulang
 		err = antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		
-		// 4. Simpan sesi baru
+		// 4. Simpan Sesi DAN Proxy Baru ke Database
+		// Update LastProxy di struct lokal dulu
+		targetAcc.LastProxy = newProxy
 		saveNewSession(client, targetAcc, accIdx-1)
 		return nil
 	}
@@ -168,24 +178,39 @@ func SingleWar() {
 		if timeLeft <= 6*time.Second { break }
 
 		// Heartbeat dengan Auto-Heal
-		// Cek setiap ping, kalau sesi mati -> renewSession (Ganti Proxy + Login)
 		if timeLeft.Seconds() < 300 {
 			fmt.Printf("\r[Heartbeat] 💓 Ping... (Sisa: %v) ", timeLeft.Round(time.Second))
 			
-			resp, err := client.DoRequest("GET", pageURL, nil, nil)
+			// UBAH: Ping ke halaman Users (lebih aman buat cek sesi)
+			pingURL := "https://antrean.logammulia.com/users"
+			resp, err := client.DoRequest("GET", pingURL, nil, nil)
+			
 			var isDead bool
+			
 			if err != nil {
-				fmt.Print("⚠️ Timeout ")
+				// Kalau timeout/error network, JANGAN panik. Anggap masih hidup.
+				fmt.Print("⚠️ Lag (Ignored) ")
 			} else {
-				// Indikator mati: redirect ke login atau status bukan 200
-				if resp.StatusCode != 200 || strings.Contains(resp.Request.URL.String(), "login") {
-					isDead = true
+				// Hanya mati jika status 302/303 DAN Location mengandung 'login'
+				// ATAU jika body HTML mengandung form login
+				if resp.StatusCode == 302 || resp.StatusCode == 303 {
+					loc, _ := resp.Header["Location"]
+					if len(loc) > 0 && strings.Contains(loc[0], "login") {
+						isDead = true
+					}
+				} else if resp.StatusCode == 200 {
+					// Baca sedikit body untuk memastikan tidak ada form login
+					// (Opsional, tapi bagus untuk akurasi)
+					bodyPreview, _ := ioutil.ReadAll(resp.Body)
+					if strings.Contains(string(bodyPreview), "Masukan e-mail") {
+						isDead = true
+					}
 				}
 				resp.Body.Close()
 			}
 
 			if isDead {
-				fmt.Println("\n🚨 SESI MATI! ROTASI PROXY & LOGIN ULANG! 🚨")
+				fmt.Println("\n🚨 SESI BENAR-BENAR MATI (LOGOUT). RE-LOGIN! 🚨")
 				if err := renewSession(); err != nil {
 					fmt.Printf("❌ Gagal Bangkit: %v (Retrying next loop)\n", err)
 				} else {
@@ -193,6 +218,7 @@ func SingleWar() {
 				}
 			}
 		}
+        // ... (kode sleep sama) ...
 
 		// Jeda Heartbeat
 		sleepTime := 30 * time.Second
