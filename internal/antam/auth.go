@@ -1,7 +1,6 @@
 package antam
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"

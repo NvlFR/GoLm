@@ -1,6 +1,8 @@
 package antam
 
 import (
+	"bytes"
+
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -41,7 +43,7 @@ func NewAntamClient(proxyURL string) (*AntamClient, error) {
 func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if len(body) > 0 {
-		req, err = http.NewRequest(method, url, http.NewBytesReader(body))
+		req, err = http.NewRequest(method, url, bytes.NewReader(body))
 	}
 	if err != nil {
 		return nil, err
