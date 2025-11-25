@@ -23,12 +23,15 @@ func ensureFile(filename string, defaultContent interface{}) {
 func InitDB() {
 	_ = os.Mkdir("database", 0755)
 	ensureFile(FileAccounts, []Account{})
+	
+	// Default settings dengan list kosong
 	ensureFile(FileSettings, Settings{
-		ProxyURL: "http://user:pass@host:port",
-		SiteID: "3",
-		WarTime: "07:00:00",
-		Debug: true,
+		ProxyList:     []string{}, // Kosong dulu
+		SiteID:        "3",
+		WarTime:       "07:00:00",
+		Debug:         true,
 	})
+	
 	ensureFile(FileWakda, WakdaData{})
 }
 

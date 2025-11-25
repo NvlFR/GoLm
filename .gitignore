@@ -48,3 +48,5 @@ Thumbs.db
 # ---- Env / Secrets ----
 .env
 .env.*
+*.html
+/database/

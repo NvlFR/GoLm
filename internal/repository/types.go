@@ -7,7 +7,7 @@ type Account struct {
 }
 
 type Settings struct {
-	ProxyURL      string `json:"proxy_url"`
+	ProxyList     []string `json:"proxy_list"`
 	SiteID        string `json:"site_id"`       // Target Cabang
 	WarTime       string `json:"war_time"`      // Jam Perang (07:00:00)
 	TwoCaptchaKey string `json:"twocaptcha_key"`

@@ -20,7 +20,10 @@ func main() {
 
 	for {
 		clearScreen()
-		printBanner()
+		// Baca settings terbaru setiap kali refresh menu
+		currentSettings, _ := repository.GetSettings()
+		
+		printBanner(currentSettings)
 		printMenu()
 
 		fmt.Print("\n[?] Masukkan Pilihan (0-11): ")
@@ -34,10 +37,37 @@ func main() {
 	}
 }
 
-func printBanner() {
-	fmt.Println("==========================================")
-	fmt.Println("       🤖 GOLM - COMMAND CENTER 🤖       ")
-	fmt.Println("==========================================")
+func printBanner(s repository.Settings) {
+// Cek Status Proxy List
+	proxyStatus := "❌ OFF"
+	proxyCount := len(s.ProxyList)
+	if proxyCount > 0 {
+		proxyStatus = fmt.Sprintf("✅ ON (%d IPs Loaded)", proxyCount)
+	}
+
+	// Cek Status Captcha
+	captchaStatus := "❌ OFF"
+	if len(s.TwoCaptchaKey) > 5 {
+		captchaStatus = "✅ ON"
+	}
+	
+	// Cek Mode Debug
+	debugStatus := "MATI"
+	if s.Debug {
+		debugStatus = "NYALA "
+	}
+
+	fmt.Println("==================================================")
+	fmt.Println("          🤖 GOLM - COMMAND CENTER v1.2          ")
+	fmt.Println("==================================================")
+	// Tampilan Dashboard Status
+	fmt.Printf(" [📡 Proxy]    : %s\n", proxyStatus)
+	fmt.Printf(" [🧩 2Captcha] : %s\n", captchaStatus)
+	fmt.Printf(" [🐞 Debug]    : %s\n", debugStatus)
+	fmt.Println("--------------------------------------------------")
+	fmt.Printf(" [🎯 Target]   : Cabang ID %s\n", s.SiteID)
+	fmt.Printf(" [⏰ Waktu War]: %s\n", s.WarTime)
+	fmt.Println("==================================================")
 }
 
 func printMenu() {
@@ -51,7 +81,7 @@ func printMenu() {
 	fmt.Println("------------------------------------------")
 	fmt.Println("[6]  👤 Tambah Akun")
 	fmt.Println("[7]  🗑️ Hapus Akun")
-	fmt.Println("[8]  ⚙️  Lihat Setting")
+	fmt.Println("[8]  ⚙️  Lihat Setting Lengkap")
 	fmt.Println("[9]  🕵️ Scrape Wakda ID")
 	fmt.Println("------------------------------------------")
 	fmt.Println("[10] 📡 Tes Proxy (Cek IP)")
@@ -62,6 +92,7 @@ func printMenu() {
 func handleInput(choice string) {
 	switch choice {
 	case "1":
+		// service.SingleWar() // Nanti kita buka comment ini
 		fmt.Println("Fitur Perang Single (Menunggu Server Buka besok pagi)")
 	case "2":
 		fmt.Println("Fitur Perang Multi (Menunggu Server Buka besok pagi)")
@@ -80,9 +111,9 @@ func handleInput(choice string) {
 	case "9":
 		fmt.Println("Fitur Scrape Wakda (Menunggu Server Buka besok pagi)")
 	case "10":
-		service.TestProxy() // Kita buat ini sekarang
+		service.TestProxy()
 	case "11":
-		service.TestCaptcha() // Kita buat ini sekarang
+		service.TestCaptcha()
 	case "0":
 		fmt.Println("Bye bye, Engineer!")
 		os.Exit(0)
@@ -92,5 +123,5 @@ func handleInput(choice string) {
 }
 
 func clearScreen() {
-	fmt.Print("\033[H\033[2J") // ANSI Escape code untuk clear terminal Linux/Mac
+	fmt.Print("\033[H\033[2J")
 }

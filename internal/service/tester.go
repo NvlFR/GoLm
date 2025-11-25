@@ -11,12 +11,21 @@ import (
 )
 
 func TestProxy() {
-	settings, _ := repository.GetSettings()
+	// Ambil proxy acak dari helper yang sudah kita buat
+	proxyURL := GetRandomProxy()
 	
-	fmt.Println("Menginisialisasi Client dengan Proxy...")
-	fmt.Println("Proxy:", settings.ProxyURL)
+	if proxyURL == "" {
+		fmt.Println("❌ Proxy List kosong! Cek database/settings.json")
+		return
+	}
 
-	client, err := antam.NewAntamClient(settings.ProxyURL)
+	fmt.Println("Menginisialisasi Client dengan Proxy:", proxyURL)
+	
+	// PERBAIKAN DI SINI:
+	// Gunakan variabel 'proxyURL' yang didapat dari GetRandomProxy()
+	// Jangan panggil settings.proxyURL lagi
+	client, err := antam.NewAntamClient(proxyURL)
+	
 	if err != nil {
 		fmt.Printf("❌ Error Init Client: %v\n", err)
 		return
@@ -25,7 +34,6 @@ func TestProxy() {
 	fmt.Println("Mencoba request ke http://ip-api.com/json (Cek IP)...")
 	start := time.Now()
 	
-	// Kita tes ke IP checker global, bukan antam
 	resp, err := client.DoRequest("GET", "http://ip-api.com/json", nil, nil)
 	if err != nil {
 		fmt.Printf("❌ Proxy GAGAL / Timeout: %v\n", err)
@@ -59,6 +67,6 @@ func TestCaptcha() {
 	} else {
 		duration := time.Since(start)
 		fmt.Printf("✅ Captcha TERPECAHKAN! (%v)\n", duration)
-		fmt.Printf("Token: %s...\n", token[:20]) // Print 20 karakter awal aja
+		fmt.Printf("Token: %s...\n", token[:20]) 
 	}
 }

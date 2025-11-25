@@ -50,7 +50,7 @@ func DeleteAccountMenu() {
 	fmt.Scanln(&num)
 
 	if num > 0 && num <= len(accounts) {
-		err := repository.DeleteAccount(num - 1) // index array mulai dari 0
+		err := repository.DeleteAccount(num - 1)
 		if err != nil {
 			fmt.Println("❌ Gagal hapus:", err)
 		} else {
@@ -62,9 +62,11 @@ func DeleteAccountMenu() {
 func ViewSettings() {
 	s, _ := repository.GetSettings()
 	fmt.Println("\n--- KONFIGURASI SAAT INI ---")
-	fmt.Printf("Proxy URL : %s\n", s.ProxyURL)
-	fmt.Printf("Site ID   : %s\n", s.SiteID)
-	fmt.Printf("War Time  : %s\n", s.WarTime)
-	fmt.Printf("2Captcha  : %s\n", s.TwoCaptchaKey)
+	// PERBAIKAN DI SINI:
+	// Kita hitung jumlah proxy di list, bukan print string URL
+	fmt.Printf("Proxy Pool : %d IPs Loaded\n", len(s.ProxyList)) 
+	fmt.Printf("Site ID    : %s\n", s.SiteID)
+	fmt.Printf("War Time   : %s\n", s.WarTime)
+	fmt.Printf("2Captcha   : %s\n", s.TwoCaptchaKey)
 	fmt.Println("\n(Edit file database/settings.json untuk mengubah)")
 }

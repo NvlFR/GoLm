@@ -33,10 +33,10 @@ func LoginSingleAccount() {
 	targetAcc := accounts[num-1]
 	settings, _ := repository.GetSettings()
 
-	fmt.Printf("Mencoba login %s ...\n", targetAcc.Username)
-	
+	proxyURL := GetRandomProxy()
+	fmt.Printf("Mencoba login %s menggunakan Proxy: ...%s\n", targetAcc.Username, proxyURL[len(proxyURL)-10:]) // Tampilkan buntutnya aja
 	// Init Client
-	client, err := antam.NewAntamClient(settings.ProxyURL)
+	client, err := antam.NewAntamClient(proxyURL)
 	if err != nil {
 		fmt.Println("Error Client:", err)
 		return
