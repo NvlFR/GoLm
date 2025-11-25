@@ -90,8 +90,10 @@ func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[str
 }
 
 func (c *AntamClient) LoadCookies(cookies []repository.CookieEntry) {
-	u, _ := url.Parse("https://antrean.logammulia.com")
-	var jarCookies []*http.Cookie
+	u1, _ := url.Parse("https://antrean.logammulia.com")
+	u2, _ := url.Parse("https://logammulia.com")
+
+var jarCookies []*http.Cookie
 
 	for _, cEntry := range cookies {
 		jarCookies = append(jarCookies, &http.Cookie{
@@ -102,5 +104,6 @@ func (c *AntamClient) LoadCookies(cookies []repository.CookieEntry) {
 		})
 	}
 	
-	c.HttpClient.GetCookieJar().SetCookies(u, jarCookies)
+	c.HttpClient.GetCookieJar().SetCookies(u1, jarCookies)
+	c.HttpClient.GetCookieJar().SetCookies(u2, jarCookies)
 }

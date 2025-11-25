@@ -57,11 +57,17 @@ func LoginSingleAccount() {
 		// Konversi ke format database kita
 		var savedCookies []repository.CookieEntry
 		for _, c := range cookies {
+			// FIX: Pakai domain yang lebih umum agar cookie terbaca di semua subdomain
+			domain := c.Domain
+			if domain == "" || domain == "antrean.logammulia.com" {
+				domain = ".logammulia.com" 
+			}
+
 			savedCookies = append(savedCookies, repository.CookieEntry{
 				Name:   c.Name,
 				Value:  c.Value,
-				Domain: c.Domain,
-				Path:   c.Path,
+				Domain: domain, 
+				Path:   "/",
 			})
 		}
 

@@ -29,7 +29,7 @@ func promptInput(label string, defaultValue string) string {
 }
 
 func SingleWar() {
-	// --- BAGIAN 1: SETUP & PILIH AKUN ---
+	// --- BAGIAN 1: SETUP AKUN ---
 	accounts, _ := repository.GetAccounts()
 	if len(accounts) == 0 {
 		fmt.Println("❌ Belum ada akun. Tambahkan dulu.")
@@ -45,59 +45,91 @@ func SingleWar() {
 	fmt.Scanln(&accIdx)
 	if accIdx < 1 || accIdx > len(accounts) { return }
 	
-	// Pointer agar bisa diupdate saat auto-relogin
 	targetAcc := &accounts[accIdx-1]
 	settings, _ := repository.GetSettings()
 
-	// --- BAGIAN 2: INPUT TARGET MANUAL ---
-	// Bersihkan buffer stdin
+	// --- BAGIAN 2: PILIH BUTIK (FITUR BARU: TAMPILKAN LIST) ---
+	// Bersihkan buffer
 	bufio.NewReader(os.Stdin).ReadBytes('\n') 
 
-	fmt.Println("\n--- 🎯 KONFIGURASI TARGET ---")
-	targetSiteID := promptInput("Masukkan ID Butik (3=Graha Dipta)", settings.SiteID)
+	fmt.Println("\n--- 🏢 PILIH BUTIK ---")
+	// Menampilkan list butik dari tokens.go
+	siteIDs := antam.GetSiteList()
+	for _, id := range siteIDs {
+		name := antam.SiteNames[id]
+		fmt.Printf("[%2s] %s\n", id, name)
+	}
+	
+	fmt.Println("----------------------")
+	targetSiteID := promptInput("Masukkan ID Butik", settings.SiteID)
+	
+	// Validasi ID
+	if _, ok := antam.SiteNames[targetSiteID]; !ok {
+		fmt.Println("❌ ID Butik tidak valid! Pastikan memilih angka yang ada di list.")
+		return
+	}
+	
 	targetTimeStr := promptInput("Masukkan Jam Perang (HH:MM:SS)", settings.WarTime)
 
-	// Init Client
+	// --- BAGIAN 3: INIT CLIENT ---
 	proxyURL := GetRandomProxy()
 	fmt.Printf("\n🔥 Menyiapkan Sniper untuk %s...\n", targetAcc.Username)
+	fmt.Printf("🌍 Proxy Awal: ...%s\n", proxyURL[len(proxyURL)-10:])
+	
 	client, err := antam.NewAntamClient(proxyURL)
 	if err != nil {
 		fmt.Println("Gagal init client:", err)
 		return
 	}
 
-	// --- BAGIAN 3: SESSION CHECK & AUTO-REVIVE ---
-	// Cek apakah punya cookie lama
+	// --- BAGIAN 4: SESSION CHECK & AUTO-REVIVE (DENGAN ROTASI PROXY) ---
+	
+	// Helper Function untuk Re-Login Total dengan Proxy Baru
+	renewSession := func() error {
+		fmt.Println("🔄 ROTASI PROXY & RE-LOGIN...")
+		// 1. Ganti Proxy
+		newProxy := GetRandomProxy()
+		fmt.Printf("🌍 New Proxy: ...%s\n", newProxy[len(newProxy)-10:])
+		
+		// 2. Buat Client Baru (Reset Cookie Jar & IP)
+		newClient, err := antam.NewAntamClient(newProxy)
+		if err != nil {
+			return err
+		}
+		*client = *newClient // Timpa client lama dengan yang baru
+
+		// 3. Login Ulang
+		err = antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
+		if err != nil {
+			return err
+		}
+		
+		// 4. Simpan sesi baru
+		saveNewSession(client, targetAcc, accIdx-1)
+		return nil
+	}
+
 	if len(targetAcc.Cookies) > 0 {
 		client.LoadCookies(targetAcc.Cookies)
-		fmt.Print("🍪 Mengecek kesehatan Cookie... ")
-		
+		fmt.Print("🍪 Cek Sesi... ")
 		if antam.CheckSessionAlive(client) {
 			fmt.Println("✅ AKTIF!")
 		} else {
-			fmt.Println("❌ MATI/EXPIRED!")
-			fmt.Println("🔄 Melakukan Auto-Login (Reviving)...")
-			
-			// Lakukan Login Ulang
-			err := antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
-			if err != nil {
-				fmt.Printf("❌ Gagal Auto-Login: %v. Batal Perang.\n", err)
+			fmt.Println("❌ MATI!")
+			if err := renewSession(); err != nil {
+				fmt.Printf("❌ Gagal Revive: %v. Abort.\n", err)
 				return
 			}
-			// Update Cookie di Database
-			saveNewSession(client, targetAcc, accIdx-1)
 		}
 	} else {
-		fmt.Println("⚠️ Tidak ada cookie. Melakukan Login awal...")
-		err := antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
-		if err != nil {
-			fmt.Printf("❌ Gagal Login: %v\n", err)
+		fmt.Println("⚠️ Sesi kosong.")
+		if err := renewSession(); err != nil {
+			fmt.Printf("❌ Gagal Login Awal: %v\n", err)
 			return
 		}
-		saveNewSession(client, targetAcc, accIdx-1)
 	}
 
-	// Hitung Waktu Target
+	// Hitung Waktu
 	now := time.Now()
 	parsedWarTime, _ := time.Parse("15:04:05", targetTimeStr)
 	targetTime := time.Date(now.Year(), now.Month(), now.Day(), parsedWarTime.Hour(), parsedWarTime.Minute(), parsedWarTime.Second(), 0, time.Local)
@@ -105,17 +137,12 @@ func SingleWar() {
 		targetTime = targetTime.Add(24 * time.Hour)
 	}
 
-	fmt.Printf("\n⏳ Menunggu Waktu Perang: %s\n", targetTime.Format("15:04:05"))
+	fmt.Printf("\n⏳ Target: %s @ %s\n", targetTime.Format("15:04:05"), antam.SiteNames[targetSiteID])
 
-	// Ambil Token Rahasia Toko (Hardcoded Map)
-	secretToken, err := antam.GetTokenBySiteID(targetSiteID)
-	if err != nil {
-		fmt.Println("❌ Site ID tidak dikenal di database token!", targetSiteID)
-		return
-	}
+	secretToken, _ := antam.GetTokenBySiteID(targetSiteID)
 	pageURL := fmt.Sprintf("https://antrean.logammulia.com/antrean?site=%s&t=%s", targetSiteID, secretToken)
 
-	// --- BAGIAN 4: HEARTBEAT LOOP (JAGA LILIN) ---
+	// --- BAGIAN 5: HEARTBEAT LOOP (JAGA LILIN) ---
 	
 	captchaChan := make(chan string)
 	var captchaStarted bool
@@ -123,11 +150,11 @@ func SingleWar() {
 	for {
 		timeLeft := time.Until(targetTime)
 		
-		// Trigger Captcha di T-90s
+		// Trigger Captcha (T-90 detik)
 		if timeLeft <= 90*time.Second && !captchaStarted {
 			captchaStarted = true
 			go func() {
-				fmt.Println("\n[Captcha] 🧩 Solving Captcha (Background)...")
+				fmt.Println("\n[Captcha] 🧩 Solving (Background)...")
 				token, err := captcha.SolveAntamCaptcha(settings.TwoCaptchaKey)
 				if err != nil {
 					fmt.Printf("❌ Gagal Captcha: %v. Retrying...\n", err)
@@ -138,183 +165,142 @@ func SingleWar() {
 			}()
 		}
 
-		// Keluar loop di T-6s
-		if timeLeft <= 6*time.Second {
-			break 
-		}
+		if timeLeft <= 6*time.Second { break }
 
-		// Heartbeat & Re-Check Session
-		if timeLeft.Seconds() < 300 { // Mulai intensif cek saat < 5 menit
+		// Heartbeat dengan Auto-Heal
+		// Cek setiap ping, kalau sesi mati -> renewSession (Ganti Proxy + Login)
+		if timeLeft.Seconds() < 300 {
 			fmt.Printf("\r[Heartbeat] 💓 Ping... (Sisa: %v) ", timeLeft.Round(time.Second))
 			
-			// Kita ping ke halaman antrean untuk warming up sekaligus cek login
 			resp, err := client.DoRequest("GET", pageURL, nil, nil)
 			var isDead bool
 			if err != nil {
-				fmt.Print("⚠️ Error Net ")
+				fmt.Print("⚠️ Timeout ")
 			} else {
-				// Cek apakah dilempar ke login?
+				// Indikator mati: redirect ke login atau status bukan 200
 				if resp.StatusCode != 200 || strings.Contains(resp.Request.URL.String(), "login") {
 					isDead = true
 				}
 				resp.Body.Close()
 			}
 
-			// JIKA MATI DI TENGAH JALAN -> LOGIN ULANG
 			if isDead {
-				fmt.Println("\n🚨 SESI MATI MENDADAK! RE-LOGIN CEPAT! 🚨")
-				err := antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
-				if err == nil {
-					fmt.Println("✅ RE-LOGIN SUKSES! LANJUT!")
-					saveNewSession(client, targetAcc, accIdx-1)
+				fmt.Println("\n🚨 SESI MATI! ROTASI PROXY & LOGIN ULANG! 🚨")
+				if err := renewSession(); err != nil {
+					fmt.Printf("❌ Gagal Bangkit: %v (Retrying next loop)\n", err)
 				} else {
-					fmt.Printf("❌ Gagal Re-Login: %v\n", err)
+					fmt.Println("✅ BANGKIT KEMBALI!")
 				}
 			}
 		}
 
-		// Sleep Logic
+		// Jeda Heartbeat
 		sleepTime := 30 * time.Second
-		if timeLeft < 60*time.Second {
-			sleepTime = 5 * time.Second // Lebih sering ping saat dekat waktu
-		}
-		if sleepTime > timeLeft-6*time.Second {
-			sleepTime = timeLeft - 6*time.Second
-		}
+		if timeLeft < 60*time.Second { sleepTime = 5 * time.Second }
+		if sleepTime > timeLeft-6*time.Second { sleepTime = timeLeft - 6*time.Second }
 		time.Sleep(sleepTime)
 	}
 
-	// --- BAGIAN 5: FINAL FETCH (The Critical Moment) ---
+	// --- BAGIAN 6: FINAL EXECUTION (GATLING GUN) ---
 	
-	fmt.Println("\n🚀 MENGAMBIL DATA SLOT TERAKHIR 🚀")
+	fmt.Println("\n🚀 FINAL FETCH DATA 🚀")
 	
-	// Loop Fetch Cepat (Retry 3x jika gagal extract)
 	var csrfToken, finalWakdaID string
 	var fetchSuccess bool
 
+	// Retry logic agresif untuk ambil data terakhir
 	for retry := 0; retry < 3; retry++ {
 		resp, err := client.DoRequest("GET", pageURL, nil, nil)
-		if err != nil {
-			fmt.Println("❌ Fetch Error:", err)
-			continue
-		}
+		if err != nil { continue }
+		
 		bodyBytes, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		bodyStr := string(bodyBytes)
 
-		// Save debug jika gagal nanti
-		if retry == 2 {
-			_ = ioutil.WriteFile("debug_final_fetch_fail.html", bodyBytes, 0644)
-		}
-
-		// 1. Parse CSRF
-		cToken, err := parser.ExtractCSRF(bodyStr)
-		if err != nil {
-			fmt.Println("⚠️ CSRF Gagal Extract (Retrying...)")
+		// Check apakah malah dilempar ke login lagi?
+		if strings.Contains(bodyStr, "Log in") || strings.Contains(bodyStr, "turnstile") {
+			fmt.Println("⚠️ Terlempar ke Login saat Fetch Final! (Panic Mode)")
 			continue
 		}
+
+		cToken, err := parser.ExtractCSRF(bodyStr)
+		if err != nil { continue }
 		csrfToken = cToken
 
-		// 2. Parse Wakda (HANYA YANG AKTIF)
-		// Kita cari ID wakda secara dinamis
 		wakdaList, err := parser.ExtractWakda(bodyStr)
 		if err != nil {
-			fmt.Println("⚠️ Wakda Tidak Ditemukan (Mungkin belum buka/penuh)")
-			// Jangan break, coba lagi, siapa tahu detik berikutnya muncul
-			time.Sleep(500 * time.Millisecond)
-			continue 
+			// Fallback ID jika toko belum buka di HTML (tapi API mungkin sudah siap)
+			finalWakdaID = "11" 
+		} else {
+			finalWakdaID = wakdaList[0].ID
 		}
 		
-		// Berhasil dapat Wakda List
-		fmt.Printf("🔍 Ditemukan %d Slot Waktu.\n", len(wakdaList))
-		for _, w := range wakdaList {
-			fmt.Printf("   - [ID:%s] %s (Disabled: %v)\n", w.ID, w.Label, w.Disabled)
-		}
-		
-		// STRATEGI: Ambil ID pertama yang ditemukan (terlepas disabled/enabled)
-		// Karena saat 06:59:59 mungkin masih disabled, tapi ID itu yang akan dipakai.
-		finalWakdaID = wakdaList[0].ID
 		fetchSuccess = true
 		break
 	}
 
 	if !fetchSuccess {
-		fmt.Println("❌ GAGAL TOTAL mengambil data perang. Abort.")
+		fmt.Println("❌ GAGAL FETCH FINAL. Mencoba Blind Fire...")
 		return
 	}
 
-	// Ambil Captcha
 	fmt.Println("📦 Mengambil stok token captcha...")
 	captchaToken := <-captchaChan
-
 	fmt.Printf("✅ DATA LENGKAP: CSRF=%s | WAKDA=%s\n", csrfToken[:8], finalWakdaID)
 
-	// --- BAGIAN 6: GATLING GUN (FIRE & RECORD) ---
-
+	// Payload
 	form := url.Values{}
 	form.Set("csrf_test_name", csrfToken)
 	form.Set("wakda", finalWakdaID)
 	form.Set("id_cabang", targetSiteID)
-	form.Set("jam_slot", targetTimeStr) // PENTING: Pakai jam yang diinput user
-	form.Set("waktu", "") // Biasanya kosong
+	form.Set("jam_slot", targetTimeStr)
+	form.Set("waktu", "")
 	form.Set("token", secretToken)
 	form.Set("g-recaptcha-response", captchaToken)
 	payload := []byte(form.Encode())
 
-	// Burst Start
+	// Burst Time (Mulai 200ms sebelum target)
 	burstStart := targetTime.Add(-200 * time.Millisecond)
 	time.Sleep(time.Until(burstStart))
 
-	fmt.Println("🔥🔥🔥 TEMBAKAN BERUNTUN DIMULAI! 🔥🔥🔥")
+	fmt.Println("🔥🔥🔥 FIRE (GATLING MODE) 🔥🔥🔥")
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			time.Sleep(time.Duration(id*100) * time.Millisecond) // 100ms delay
+			time.Sleep(time.Duration(id*100) * time.Millisecond)
 
-			// Request
-			reqStart := time.Now()
 			respWar, err := client.DoRequest("POST", "https://antrean.logammulia.com/antrean-ambil", payload, map[string]string{
 				"Content-Type": "application/x-www-form-urlencoded",
 				"Referer":      pageURL,
 				"Origin":       "https://antrean.logammulia.com",
 			})
-			duration := time.Since(reqStart)
 
-			// BLACKBOX LOGGING (Rekam Apapun Hasilnya)
 			if err != nil {
-				fmt.Printf("[Peluru-%d] ❌ Network Error: %v\n", id, err)
+				fmt.Printf("P-%d ❌ Err\n", id)
 				return
 			}
 			defer respWar.Body.Close()
 			
-			bodyBytes, _ := ioutil.ReadAll(respWar.Body)
-			bodyStr := string(bodyBytes)
+			// SIMPAN BUKTI HTML
+			body, _ := ioutil.ReadAll(respWar.Body)
+			sBody := string(body)
+			_ = ioutil.WriteFile(fmt.Sprintf("LOG_%d.html", id), body, 0644)
 
-			// Simpan Log HTML untuk analisis nanti
-			logFileName := fmt.Sprintf("LOG_Peluru_%d_%d.html", id, time.Now().Unix())
-			_ = ioutil.WriteFile(logFileName, bodyBytes, 0644)
-
-			// Cek Kemenangan
-			status := "❌ GAGAL"
-			if strings.Contains(bodyStr, "Swal.fire") || strings.Contains(bodyStr, "qrcode") {
-				status = "🏆 MENANG!!!"
-			} else if strings.Contains(bodyStr, "Penuh") {
-				status = "⚠️ PENUH"
+			if strings.Contains(sBody, "Swal.fire") || strings.Contains(sBody, "qrcode") {
+				fmt.Printf("\n🏆 P-%d MENANG! (Cek LOG_%d.html)\n", id, id)
+			} else {
+				fmt.Printf("P-%d Gagal\n", id)
 			}
-
-			fmt.Printf("[Peluru-%d] Status: %d | Time: %v | Result: %s | File: %s\n", 
-				id, respWar.StatusCode, duration, status, logFileName)
-
 		}(i)
 	}
 	wg.Wait()
-	fmt.Println("\n🏁 WAR SELESAI. Silakan cek file HTML log.")
+	fmt.Println("\n🏁 WAR SELESAI.")
 }
 
-// Helper Save Session
+// Helper untuk menyimpan sesi baru ke database setelah auto-login
 func saveNewSession(client *antam.AntamClient, acc *repository.Account, idx int) {
 	u, _ := url.Parse("https://antrean.logammulia.com")
 	cookies := client.HttpClient.GetCookieJar().Cookies(u)
