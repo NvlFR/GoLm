@@ -1,0 +1,96 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/username/golm/config"
+	"github.com/username/golm/internal/repository"
+	"github.com/username/golm/internal/service"
+)
+
+func main() {
+	// 1. Init System
+	config.LoadConfig()
+	repository.InitDB()
+	
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		clearScreen()
+		printBanner()
+		printMenu()
+
+		fmt.Print("\n[?] Masukkan Pilihan (0-11): ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+
+		handleInput(input)
+
+		fmt.Println("\nTekan [Enter] untuk kembali ke menu...")
+		reader.ReadString('\n')
+	}
+}
+
+func printBanner() {
+	fmt.Println("==========================================")
+	fmt.Println("       🤖 GOLM - COMMAND CENTER 🤖       ")
+	fmt.Println("==========================================")
+}
+
+func printMenu() {
+	fmt.Println("[1]  🚀 Perang Single Akun")
+	fmt.Println("[2]  🚀 Perang Multi Akun")
+	fmt.Println("------------------------------------------")
+	fmt.Println("[3]  🔑 Login Single Akun")
+	fmt.Println("[4]  🔑 Login Semua Akun")
+	fmt.Println("------------------------------------------")
+	fmt.Println("[5]  📊 Cek Slot & Kuota")
+	fmt.Println("------------------------------------------")
+	fmt.Println("[6]  👤 Tambah Akun")
+	fmt.Println("[7]  🗑️ Hapus Akun")
+	fmt.Println("[8]  ⚙️  Lihat Setting")
+	fmt.Println("[9]  🕵️ Scrape Wakda ID")
+	fmt.Println("------------------------------------------")
+	fmt.Println("[10] 📡 Tes Proxy (Cek IP)")
+	fmt.Println("[11] 🧩 Tes 2Captcha")
+	fmt.Println("[0]  ❌ Keluar")
+}
+
+func handleInput(choice string) {
+	switch choice {
+	case "1":
+		fmt.Println("Fitur Perang Single (Menunggu Server Buka besok pagi)")
+	case "2":
+		fmt.Println("Fitur Perang Multi (Menunggu Server Buka besok pagi)")
+	case "3":
+		service.LoginSingleAccount()
+	case "4":
+		fmt.Println("Fitur Login Multi sedang dikerjakan...")
+	case "5":
+		fmt.Println("Fitur Cek Slot sedang dikerjakan...")
+	case "6":
+		service.AddAccountMenu()
+	case "7":
+		service.DeleteAccountMenu()
+	case "8":
+		service.ViewSettings()
+	case "9":
+		fmt.Println("Fitur Scrape Wakda (Menunggu Server Buka besok pagi)")
+	case "10":
+		service.TestProxy() // Kita buat ini sekarang
+	case "11":
+		service.TestCaptcha() // Kita buat ini sekarang
+	case "0":
+		fmt.Println("Bye bye, Engineer!")
+		os.Exit(0)
+	default:
+		fmt.Println("⚠️ Pilihan tidak valid!")
+	}
+}
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J") // ANSI Escape code untuk clear terminal Linux/Mac
+}
