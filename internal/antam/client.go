@@ -17,8 +17,9 @@ func NewAntamClient(proxyURL string) (*AntamClient, error) {
 
 	options := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(30),
-		// UBAH 1: Ganti Profil ke Safari MacOS (Lebih trusted)
-		tls_client.WithClientProfile(profiles.Safari_15_6_1), 
+		// FIX: Gunakan Chrome 117 (Support di tls-client v1.7.2)
+		tls_client.WithClientProfile(profiles.Chrome_117),
+		tls_client.WithRandomTLSExtensionOrder(),
 		tls_client.WithNotFollowRedirects(),
 		tls_client.WithCookieJar(jar),
 	}
@@ -34,8 +35,8 @@ func NewAntamClient(proxyURL string) (*AntamClient, error) {
 
 	return &AntamClient{
 		HttpClient: client,
-		// UBAH 2: User Agent harus PERSIS sama dengan profil Safari di atas
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.1 Safari/605.1.15",
+		// User Agent disesuaikan ke Chrome 117
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36",
 	}, nil
 }
 
@@ -53,22 +54,30 @@ func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[str
 		return nil, err
 	}
 
-	// UBAH 3: Headers harus meniru Safari
-	// Urutan header itu PENTING bagi Cloudflare
-	req.Header.Set("User-Agent", c.UserAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7")
-	// req.Header.Set("Accept-Encoding", "gzip, deflate, br") // Biarkan library yang atur ini otomatis
+	// HEADER Chrome 117 yang valid
+	req.Header.Set("sec-ch-ua", `"Google Chrome";v="117", "Not;A=Brand";v="8", "Chromium";v="117"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+	req.Header.Set("upgrade-insecure-requests", "1")
+	req.Header.Set("user-agent", c.UserAgent)
+	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("sec-fetch-site", "same-origin")
+	req.Header.Set("sec-fetch-mode", "navigate")
+	req.Header.Set("sec-fetch-user", "?1")
+	req.Header.Set("sec-fetch-dest", "document")
+	req.Header.Set("accept-language", "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7")
 	
-	// Header tambahan
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
+	// Handle Referer
+	if val, ok := headers["Referer"]; ok {
+		req.Header.Set("referer", val)
+	} else {
+		req.Header.Set("referer", "https://antrean.logammulia.com/")
+	}
 
-	// Timpa dengan header khusus (seperti Referer dll)
 	for k, v := range headers {
-		req.Header.Set(k, v)
+		if k != "Referer" {
+			req.Header.Set(k, v)
+		}
 	}
 
 	return c.HttpClient.Do(req)

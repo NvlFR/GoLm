@@ -6,21 +6,35 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/username/golm/internal/captcha"
 	"github.com/username/golm/internal/parser"
 )
 
-// DebugHelper: Simpan HTML ke file
+// DebugHelper
 func dumpHTML(filename string, body []byte) {
 	_ = ioutil.WriteFile(filename, body, 0644)
-	log.Printf("[Debug] HTML disimpan ke %s (Cek file ini!)", filename)
 }
 
 func PerformLogin(client *AntamClient, username, password, captchaKey string) error {
 	loginURL := "https://antrean.logammulia.com/login"
+	homeURL := "https://antrean.logammulia.com/"
 
-	// 1. GET Login Page
+	// ---------------------------------------------------------
+	// LANGKAH 0: WARMING UP (PENTING UNTUK BYPASS CLOUDFLARE)
+	// ---------------------------------------------------------
+	log.Println("[Auth] Mengakses Homepage untuk inisialisasi Cookie...")
+	respHome, err := client.DoRequest("GET", homeURL, nil, nil)
+	if err == nil {
+		respHome.Body.Close()
+		// Sleep sebentar seolah-olah loading page
+		time.Sleep(2 * time.Second)
+	}
+	
+	// ---------------------------------------------------------
+	// LANGKAH 1: GET LOGIN PAGE
+	// ---------------------------------------------------------
 	log.Println("[Auth] Mengakses halaman login...")
 	resp, err := client.DoRequest("GET", loginURL, nil, nil)
 	if err != nil {
@@ -29,31 +43,35 @@ func PerformLogin(client *AntamClient, username, password, captchaKey string) er
 	bodyBytes, _ := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	
-	// DEBUGGING POINT: Simpan HTML awal
-	// Jika gagal extract CSRF, kamu bisa buka file ini di browser
-	// untuk melihat apakah kena blokir Cloudflare.
-	dumpHTML("debug_login_page.html", bodyBytes)
-
-	// Cek apakah kena Cloudflare Turnstile
-	if strings.Contains(string(bodyBytes), "Just a moment") || strings.Contains(string(bodyBytes), "turnstile") {
-		return fmt.Errorf("TERDETEKSI CLOUDFLARE CHALLENGE! Proxy mungkin kotor atau TLS Client perlu ganti profil.")
+	// Cek Jebakan Cloudflare
+	bodyString := string(bodyBytes)
+	if strings.Contains(bodyString, "Just a moment") || strings.Contains(bodyString, "turnstile") {
+		dumpHTML("debug_cf_blocked.html", bodyBytes)
+		return fmt.Errorf("TERBLOKIR: Cloudflare Challenge muncul. Coba ganti Proxy.")
 	}
 
 	// Parse CSRF
-	csrfToken, err := parser.ExtractCSRF(string(bodyBytes))
+	csrfToken, err := parser.ExtractCSRF(bodyString)
 	if err != nil {
-		return fmt.Errorf("gagal ambil CSRF (Cek debug_login_page.html): %v", err)
+		dumpHTML("debug_no_csrf.html", bodyBytes)
+		return fmt.Errorf("gagal ambil CSRF: %v", err)
 	}
 	log.Printf("[Auth] CSRF Login didapat: %s...", csrfToken[:10])
 
-	// 2. Solve Captcha
+	// ---------------------------------------------------------
+	// LANGKAH 2: SOLVE CAPTCHA (Paralel)
+	// ---------------------------------------------------------
 	log.Println("[Auth] Solving Captcha...")
 	captchaToken, err := captcha.SolveAntamCaptcha(captchaKey)
 	if err != nil {
 		return err
 	}
+	// Sleep random biar kayak manusia yang baru selesai ngetik captcha
+	time.Sleep(1 * time.Second)
 
-	// 3. POST Login
+	// ---------------------------------------------------------
+	// LANGKAH 3: POST LOGIN
+	// ---------------------------------------------------------
 	formData := url.Values{}
 	formData.Set("username", username)
 	formData.Set("password", password)
@@ -62,20 +80,35 @@ func PerformLogin(client *AntamClient, username, password, captchaKey string) er
 	formData.Set("g-recaptcha-response", captchaToken)
 	formData.Set("rememberMe", "on")
 
-	respLogin, err := client.DoRequest("POST", loginURL, []byte(formData.Encode()), map[string]string{
+	// Header Referer PENTING saat POST
+	headers := map[string]string{
+		"Referer": loginURL,
+		"Origin": "https://antrean.logammulia.com",
 		"Content-Type": "application/x-www-form-urlencoded",
-	})
+	}
+
+	respLogin, err := client.DoRequest("POST", loginURL, []byte(formData.Encode()), headers)
 	if err != nil {
 		return err
 	}
 	defer respLogin.Body.Close()
 
+	// ---------------------------------------------------------
+	// LANGKAH 4: VALIDASI
+	// ---------------------------------------------------------
+	// Sukses biasanya redirect 302/303
 	if respLogin.StatusCode == 302 || respLogin.StatusCode == 303 {
-		log.Println("[Auth] Login Sukses (Redirect).")
+		log.Println("[Auth] Login Sukses (Redirect). Sesi disimpan.")
 		return nil
 	}
 
+	// Cek response body jika tidak redirect
 	bodyFail, _ := ioutil.ReadAll(respLogin.Body)
+	if strings.Contains(string(bodyFail), "dashboard") || strings.Contains(string(bodyFail), "users") {
+		log.Println("[Auth] Login Sukses (200 OK).")
+		return nil
+	}
+
 	dumpHTML("debug_login_fail.html", bodyFail)
 	return fmt.Errorf("login gagal status %d", respLogin.StatusCode)
 }
