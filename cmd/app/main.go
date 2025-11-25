@@ -92,8 +92,8 @@ func printMenu() {
 func handleInput(choice string) {
 	switch choice {
 	case "1":
-		// service.SingleWar() // Nanti kita buka comment ini
-		fmt.Println("Fitur Perang Single (Menunggu Server Buka besok pagi)")
+		service.SingleWar() 
+		
 	case "2":
 		fmt.Println("Fitur Perang Multi (Menunggu Server Buka besok pagi)")
 	case "3":

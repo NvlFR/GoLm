@@ -60,6 +60,19 @@ func DeleteAccount(index int) error {
 	return ioutil.WriteFile(FileAccounts, data, 0644)
 }
 
+// UpdateAccount memperbarui data akun yang sudah ada berdasarkan index
+func UpdateAccount(index int, acc Account) error {
+	accounts, _ := GetAccounts()
+	if index < 0 || index >= len(accounts) {
+		return nil
+	}
+	// Update data
+	accounts[index] = acc
+	
+	data, _ := json.MarshalIndent(accounts, "", "  ")
+	return ioutil.WriteFile(FileAccounts, data, 0644)
+}
+
 // --- CRUD SETTINGS ---
 func GetSettings() (Settings, error) {
 	var settings Settings

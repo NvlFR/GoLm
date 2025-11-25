@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/username/golm/internal/antam"
 	"github.com/username/golm/internal/repository"
@@ -42,11 +43,37 @@ func LoginSingleAccount() {
 		return
 	}
 
-	// Panggil Logic Login Low-Level
 	err = antam.PerformLogin(client, targetAcc.Username, targetAcc.Password, settings.TwoCaptchaKey)
 	if err != nil {
 		fmt.Printf("❌ GAGAL LOGIN: %v\n", err)
 	} else {
-		fmt.Println("✅ BERHASIL LOGIN! Cookies tersimpan di memory.")
+		fmt.Println("✅ BERHASIL LOGIN! Menyimpan sesi ke database...")
+
+		// --- LOGIC PENYIMPANAN COOKIE ---
+		targetURL, _ := url.Parse("https://antrean.logammulia.com")
+		// Ambil cookie dari Jar si Client
+		cookies := client.HttpClient.GetCookieJar().Cookies(targetURL)
+		
+		// Konversi ke format database kita
+		var savedCookies []repository.CookieEntry
+		for _, c := range cookies {
+			savedCookies = append(savedCookies, repository.CookieEntry{
+				Name:   c.Name,
+				Value:  c.Value,
+				Domain: c.Domain,
+				Path:   c.Path,
+			})
+		}
+
+		// Update struct akun
+		targetAcc.Cookies = savedCookies
+		
+		// Simpan ke JSON
+		err := repository.UpdateAccount(num-1, targetAcc)
+		if err != nil {
+			fmt.Printf("⚠️ Login sukses tapi gagal simpan ke file: %v\n", err)
+		} else {
+			fmt.Printf("💾 Sesi disimpan! (%d cookies aktif)\n", len(savedCookies))
+		}
 	}
 }

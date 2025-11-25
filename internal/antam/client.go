@@ -2,9 +2,13 @@ package antam
 
 import (
 	"bytes"
+	"net/url"
+
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
+
+	"github.com/username/golm/internal/repository"
 )
 
 type AntamClient struct {
@@ -81,4 +85,22 @@ func (c *AntamClient) DoRequest(method, url string, body []byte, headers map[str
 	}
 
 	return c.HttpClient.Do(req)
+
+	
+}
+
+func (c *AntamClient) LoadCookies(cookies []repository.CookieEntry) {
+	u, _ := url.Parse("https://antrean.logammulia.com")
+	var jarCookies []*http.Cookie
+
+	for _, cEntry := range cookies {
+		jarCookies = append(jarCookies, &http.Cookie{
+			Name:   cEntry.Name,
+			Value:  cEntry.Value,
+			Domain: cEntry.Domain,
+			Path:   cEntry.Path,
+		})
+	}
+	
+	c.HttpClient.GetCookieJar().SetCookies(u, jarCookies)
 }
