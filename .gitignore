@@ -1,0 +1,50 @@
+arsip
+
+# ---- Go Build Files ----
+bin/
+build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# ---- Compiled Go Binaries ----
+*.out
+
+# ---- Go Modules Cache ----
+/vendor/
+/go.sum
+
+# ---- Logs ----
+*.log
+
+# ---- IDE / Editor Files ----
+# VSCode
+.vscode/
+.code-workspace
+
+# JetBrains (GoLand)
+.idea/
+
+# ---- OS Files ----
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Linux
+*.swp
+*.swo
+
+# ---- Temporary Files ----
+*.tmp
+*.cache
+*.bak
+*.old
+
+# ---- Env / Secrets ----
+.env
+.env.*
